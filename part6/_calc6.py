@@ -80,8 +80,8 @@ class Interpreter(object):
     def error(self):
         raise Exception('invalid syntax')
 
-    def eat(self, type):
-        if self.current_token.type == type:
+    def eat(self, token_type):
+        if self.current_token.type == token_type:
             self.current_token = self.lexer.get_next_token()
         else:
             self.error()
