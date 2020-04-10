@@ -3,7 +3,6 @@
 PROGRAM = 'PROGRAM'
 MINUS = 'MINUS'
 PLUS = 'PLUS'
-DIV = 'DIV'
 MUL = 'MUL'
 BEGIN = 'BEGIN'
 END = 'END'
@@ -42,7 +41,7 @@ class Token(object):
 RESERVED_KEYWORDS = {
     "PROGRAM": Token(PROGRAM, PROGRAM),
     "VAR": Token(VAR, VAR),
-    "DIV": Token(DIV, DIV),
+    "DIV": Token(INTEGER_DIV, 'DIV'),
     "INTEGER": Token(INTEGER, INTEGER),
     "REAL": Token(REAL, REAL),
     "BEGIN": Token(BEGIN, BEGIN),
@@ -57,6 +56,9 @@ class Lexer(object):
         self.text = text
         self.pos = 0
         self.current_char = text[self.pos]
+
+    def error(self):
+        raise Exception('lexer error')
 
     def skip_whitespace(self):
         while self.current_char.isspace():
@@ -73,6 +75,33 @@ class Lexer(object):
             self.advance()
 
     def get_ID(self):
+        r = ''
+        while self.current_char.isalpha():
+            r += self.current_char
+            self.advance()
+        reserve = RESERVED_KEYWORDS.get(r)
+        if reserve is not None:
+            return reserve
+        else:
+            return Token(ID, r)
+
+    def integer(self):
+        r = ''
+        real = False
+        while self.current_char.isdigit() or self.current_char == '.':
+            r += self.current_char
+            if self.current_char == '.':
+                if real:
+                    self.error()
+                else:
+                    real = True
+            self.advance()
+        if real:
+            return Token(REAL_CONST, r)
+        return Token(INTEGER_CONST, r)
+
+    def peek(self, value):
+        return self.text[self.pos + 1] == value
 
     def get_next_token(self):
         while self.current_char is not None:
@@ -82,3 +111,142 @@ class Lexer(object):
                 self.skip_comment()
             if self.current_char.isalpha():
                 return self.get_ID()
+            if self.current_char.isdigit():
+                return self.integer()
+            if self.current_char == '+':
+                return Token(PLUS, '+')
+            if self.current_char == '-':
+                return Token(MINUS, '-')
+            if self.current_char == '*':
+                return Token(MUL, '*')
+            if self.current_char == '.':
+                return Token(DOT, '.')
+            if self.current_char == ':' and self.peek('='):
+                return Token(ASSIGN, ':=')
+            if self.current_char == '/':
+                return Token(REAL, '/')
+            if self.current_char == '(':
+                return Token(LPAREN, '(')
+            if self.current_char == ')':
+                return Token(RPAREN, ')')
+            if self.current_char == ':':
+                return Token(COLON, ':')
+            if self.current_char == ',':
+                return Token(COMMA, ',')
+            if self.current_char == ';':
+                return Token(SEMI, ';')
+
+        return Token(EOF, EOF)
+
+
+# AST NODE
+
+class AST(object):
+    pass
+
+
+class Program(AST):
+    def __init__(self, name, block):
+        self.name = name
+        self.block = block
+
+
+class Block(AST):
+    def __init__(self, declarations, compound_statements):
+        self.declarations = declarations
+        self.compound_statements = compound_statements
+
+
+class Declaration(AST):
+    def __init__(self, ID, type):
+        self.ID = ID
+        self.type = type
+
+
+class Compound(AST):
+    def __init__(self, statelment_list):
+        self.statement_list = statelment_list
+
+
+class Assign(AST):
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+
+class BinOp(AST):
+    def __init__(self, left, op, right):
+        self.token = self.op = op
+        self.left = left
+        self.right = right
+
+
+class Var(AST):
+    def __init__(self, token):
+        self.token = token
+        self.value = token.value
+
+
+class Num(AST):
+    def __init__(self, token):
+        self.token = token
+        self.value = token.value
+
+
+class Type(AST):
+    def __init__(self, value):
+        self.value = value
+
+
+# Parse
+class Parse(object):
+    def __init__(self, lexer):
+        self.lexer = lexer
+        self.current_token = self.lexer.get_next_token()
+
+    def error(self):
+        raise Exception('parse error')
+
+    def eat(self, type):
+        if self.current_token.type != type:
+            self.error()
+        else:
+            self.current_token = self.lexer.get_next_token()
+
+    def variable(self):
+        """variable: ID"""
+        var = Var(self.current_token)
+        self.eat(ID)
+        return var
+
+    def declaration(self):
+        """variable |(COMMA variable)+ COLON type SEMI"""
+        temp = []
+        temp.append(self.current_token)
+        self.eat(ID)
+        while self.current_token.type == COMMA:
+            temp.append(self.current_token)
+        self.eat(COLON)
+
+        self.eat(ID)
+        self.eat()
+
+    def declarations(self):
+        """declarations: VAR (declaration SEMI)+ | empty"""
+        self.eat(VAR)
+        decs = []
+        while self.current_token.type == ID:
+            decs.append(self.declaration())
+
+    def block(self):
+        """block: declarations compound"""
+        declarations = self.declarations()
+        while self.current_token.type == ID:
+            declarations.append(self.declaration())
+
+    def program(self):
+        """program: PROGRAM variable SEMI BLOCK DOT"""
+        self.eat(PROGRAM)
+        name = self.variable()
+        self.eat(SEMI)
+        block = self.block()
