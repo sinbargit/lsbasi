@@ -181,7 +181,7 @@ class BinOp(AST):
         self.right = right
 
 
-class Var(AST):
+class Variable(AST):
     def __init__(self, token):
         self.token = token
         self.value = token.value
@@ -215,34 +215,52 @@ class Parse(object):
 
     def variable(self):
         """variable: ID"""
-        var = Var(self.current_token)
+        var = Variable(self.current_token)
         self.eat(ID)
         return var
 
     def declaration(self):
-        """variable |(COMMA variable)+ COLON type SEMI"""
-        temp = []
-        temp.append(self.current_token)
+        """variable |(COMMA variable)+ COLON type"""
+        temp = [self.current_token]
         self.eat(ID)
         while self.current_token.type == COMMA:
             temp.append(self.current_token)
         self.eat(COLON)
-
-        self.eat(ID)
-        self.eat()
+        type_node = Type(self.current_token)
+        self.eat(self.current_token.type)
+        self.eat(SEMI)
+        list = [Declaration(Variable(var), type_node) for var in temp]
+        return list
 
     def declarations(self):
         """declarations: VAR (declaration SEMI)+ | empty"""
         self.eat(VAR)
         decs = []
         while self.current_token.type == ID:
-            decs.append(self.declaration())
+            decs.extend(self.declaration())
+            self.eat(SEMI)
+        return decs
+    def compound(self):
+        """compound: BEGIN statement_list END"""
+        self.eat(BEGIN)
+        nodes = self.statement_list()
+        self.eat(END)
+        return nodes
+    def statement(self):
+        """statement: assignment_statement | compound_statement |empty"""
 
+
+    def statement_list(self):
+        """statement_list: statement | SEMI statement_list"""
+        statement_list = [self.statement()]
+        while self.current_token.type == SEMI:
+            self.eat(SEMI)
+            statement_list.append(self.statement())
     def block(self):
         """block: declarations compound"""
         declarations = self.declarations()
-        while self.current_token.type == ID:
-            declarations.append(self.declaration())
+        compound = self.compound()
+        return Block(declarations,compound)
 
     def program(self):
         """program: PROGRAM variable SEMI BLOCK DOT"""
